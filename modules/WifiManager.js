@@ -33,7 +33,7 @@ function WifiManager(options) {
 
 function wifiScan(self) {
   self.log('scan wifi...');
-  wifi.scan( function(res){
+  wifi.scan((res)=>{
     //sort by rssi
     res = res.sort((a,b) => (b.rssi - a.rssi)); 
     // remove dubs
@@ -53,31 +53,40 @@ function wifiScan(self) {
     if (count===0) scantxt = "No networks found.";
     wifiitems="<br/>"+scantxt;
     self.log('wifi scan done. found '+count+' networks.');
-    setTimeout(function(){wifiScan(self);},self.wifiScanInterval);
+    setTimeout(()=>{wifiScan(self);},self.wifiScanInterval);
   });
 }
+
+
+function getRSSIasQuality(RSSI) {
+  var  quality;
+  if (RSSI <= -100) { quality = 0; } 
+  else if (RSSI >= -50) { quality = 100; } 
+  else { quality = 2 * (RSSI + 100); }
+  return quality;
+}
+
 
 WifiManager.prototype.start = function() {
   if (wifi.getStatus().station=='connecting') {
     setTimeout(this.start,500);
     return false;
   }
-  this.log(wifi.getStatus());
-  this.log(wifi.getIP());
+  //this.log(wifi.getStatus());
+  //this.log(wifi.getIP());
   if( wifi.getIP().ip === "0.0.0.0" ) {
     this.log('No wifi connection. Starting setup. Connect to ap '+this.apName+' for setup.');
     //create captive portal for setup wifi credentials
     wifi.setConfig({powersave : "none"});
-    var self=this;
-    wifi.startAP(this.apName,{"authMode":'open',"password" : null},function(err) {
+    wifi.startAP(this.apName,{"authMode":'open',"password":null},(err) => {
       if (err) {
-        self.log(err);
-        self.restart(err);
+        this.log(err);
+        this.restart(err);
       }
-      self.log("AP started");
-      self.startHttpServer();
-      self.startDNSServer();
-      setTimeout(function(){wifiScan(self);},2000);
+      this.log("AP started");
+      this.startHttpServer();
+      this.startDNSServer();
+      setTimeout(()=>{wifiScan(this);},2000);
     });
   } else {
     this.log('wifi connected. IP: '+wifi.getIP().ip);
@@ -186,30 +195,31 @@ var HTTP_END = `
   </div></body></html>`;
 
 
-function onPageRequest(req, res, self) { 
+function onPageRequest(req, res, self) {
   var a = url.parse(req.url, true);
+  self.log('reqested page '+a.pathname);
   var page;
   if (a.pathname === '/' || a.pathname === '') {
     page = HTTP_HEAD.replace("{v}", "Config ESP");
     page += "<h1>" + self.title + "</h1>";
     page += "<h3>Setup Wifi</h3>";
     page += HTTP_FORM_START.replace('{n}',self.apName);
-    page += wifiitems;
     // add the extra parameters to the form
     for (const p of self.params) {
       var pitem = HTTP_FORM_PARAM;
       if (p.id) {
         pitem.replace("{i}", p.id);
-        pitem.replace("{n}", p.name);
-        pitem.replace("{p}", p.placeholder);
-        pitem.replace("{l}", p.valueLength);
-        pitem.replace("{v}", p.value);
-        pitem.replace("{c}", p.customHTML);
+        pitem.replace("{n}", p.name || p.id);
+        pitem.replace("{p}", p.placeholder || '');
+        pitem.replace("{l}", p.valueLength || '');
+        pitem.replace("{v}", p.value || '');
+        pitem.replace("{c}", p.customHTML || '');
       } else {
         pitem = p.customHTML;
       }
       page += pitem;
     }
+    page += wifiitems;
     page += HTTP_FORM_END;
     page += HTTP_SCAN_LINK;
 
@@ -230,14 +240,14 @@ function onPageRequest(req, res, self) {
     res.end(page);
     wifi.setHostname(a.query.n);
     wifi.connect(a.query.s, {password:a.query.p},
-       function(err) {
+       (err) => {
           if (err) {
             self.log('error connecting to wifi: '+err);
             return;
           }
           self.log('wifi connected');
           setTimeout(wifi.save,200);
-          wifi.stopAP(function(){
+          wifi.stopAP(()=>{
             if (self.connectedcallback) self.connectedcallback(); else setTimeout(self.restart,1000);
           });
      });
@@ -255,18 +265,6 @@ function onPageRequest(req, res, self) {
   else {
     res.writeHead(302, {'Location': 'http://'+C.DNSIPSTR+'/'});
   }
-}
-
-function getRSSIasQuality(RSSI) {
-  var  quality = 0;
-  if (RSSI <= -100) {
-    quality = 0;
-  } else if (RSSI >= -50) {
-    quality = 100;
-  } else {
-    quality = 2 * (RSSI + 100);
-  }
-  return quality;
 }
 
 
@@ -291,14 +289,13 @@ function dnsResponse(msg,dns_ip){
 WifiManager.prototype.startDNSServer = function() { 
   this.dns = require('dgram').createSocket('udp4');
   var dnsIP = C.DNSIPSTR.split('.').map(n => String.fromCharCode(parseInt(n, 10))).join('');
-  var self=this;
   this.dns.on('error', (err) => {
-    self.log('error starting dns server: '+err);
-    self.restart();
+    this.log('error starting dns server: '+err);
+    this.restart();
   });
   this.dns.on('message', (msg, info) => {
     if ( msg[msg.length-3] === '\x01') {
-      dns.send(dnsResponse(msg,dnsIP),info.port,info.address);
+      this.dns.send(dnsResponse(msg,dnsIP),info.port,info.address);
     }
   });
   this.dns.bind(53);
@@ -307,8 +304,7 @@ WifiManager.prototype.startDNSServer = function() {
 
 // start http server
 WifiManager.prototype.startHttpServer = function(){
-  var self=this;
-  this.server = require('http').createServer(function(){onPageRequest(req, res, self);});
+  this.server = require('http').createServer((req, res)=>{onPageRequest(req, res, this);});
   this.server.listen(80);
 };
 
@@ -330,3 +326,9 @@ exports.start = function(options) {
 exports.clearsaved = function() {
   require('Wifi').save('clear');
 };
+
+/*
+exports.clearsaved();
+exports.start({wifiScanInterval:5000,params:[{id:'a',name:'a',value:'dummy',placeholder:'enter value'}]});
+*/
+
