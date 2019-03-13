@@ -22,12 +22,12 @@ function WifiManager(options) {
   this.wifiScanInterval = options.wifiScanInterval || 30000;
   this.apName = options.apName || C.APNAME;
   this.title = options.title || C.APNAME;
-  this.wifiitems = "";
-  this.params = [];
+  this.params = options.params || [];
   this.paramscallback = options.paramscallback;
   this.connectedcallback = options.connectedcallback;
   this.log = options.log || console.log;
   this.restart = options.restart || function(){require('ESP8266').reboot()};
+  this.wifiitems = "";
 }
 
 WifiManager.prototype.start = function() {
@@ -184,7 +184,7 @@ function handleRoot(req,res,a) {
     var pitem = HTTP_FORM_PARAM;
     if (p.id) {
       pitem.replace("{i}", p.id);
-      pitem.replace("{n}", p.id);
+      pitem.replace("{n}", p.name);
       pitem.replace("{p}", p.placeholder);
       pitem.replace("{l}", p.valueLength);
       pitem.replace("{v}", p.value);
@@ -220,7 +220,7 @@ function handleWifiSave(req,res,a) {
   var wifi = require('Wifi');
   //parameters
   for (const p of this.params) {
-    p.value = a.query[p.id];
+    p.value = a.query[p.name];
   }
   var page = HTTP_HEAD.replace("{v}", "Credentials Saved");
   page += HTTP_SAVED;
