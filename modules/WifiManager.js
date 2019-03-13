@@ -168,7 +168,6 @@ var HTTP_FORM_START = `
       <input id='s' name='s' length=32 placeholder='SSID'><br/>
       <input id='p' name='p' length=64 type='password' placeholder='password'><br/>
       <input id='n' name='n' length=32 placeholder='Device name' value='{n}'><br/>
-      <br/>
 `;
 var HTTP_FORM_PARAM = `
     <input id='{i}' name='{n}' maxlength={l} placeholder='{p}' value='{v}' {c}>
@@ -197,7 +196,7 @@ var HTTP_END = `
 
 function onPageRequest(req, res, self) {
   var a = url.parse(req.url, true);
-  self.log('reqested page '+a.pathname);
+  //self.log('reqested page '+JSON.stringify(a));
   var page;
   if (a.pathname === '/' || a.pathname === '') {
     page = HTTP_HEAD.replace("{v}", "Config ESP");
@@ -206,14 +205,15 @@ function onPageRequest(req, res, self) {
     page += HTTP_FORM_START.replace('{n}',self.apName);
     // add the extra parameters to the form
     for (const p of self.params) {
-      var pitem = HTTP_FORM_PARAM;
+      var pitem;
       if (p.id) {
-        pitem.replace("{i}", p.id);
-        pitem.replace("{n}", p.name || p.id);
-        pitem.replace("{p}", p.placeholder || '');
-        pitem.replace("{l}", p.valueLength || '');
-        pitem.replace("{v}", p.value || '');
-        pitem.replace("{c}", p.customHTML || '');
+        pitem = HTTP_FORM_PARAM
+        .replace("{i}", p.id)
+        .replace("{n}", p.id)
+        .replace("{p}", p.placeholder || '')
+        .replace("{l}", p.valueLength || '')
+        .replace("{v}", p.value || '')
+        .replace("{c}", p.customHTML || '');
       } else {
         pitem = p.customHTML;
       }
@@ -227,18 +227,19 @@ function onPageRequest(req, res, self) {
 
     res.writeHead(200,{'Content-Length':page.length,'Content-Type': 'text/html'});
     res.end(page);
+    return;
   }
-  else if (a.pathname === '/s') {
+  if (a.pathname === '/s') {
     //parameters
     for (const p of self.params) {
-      p.value = a.query[p.name];
+      p.value = a.query[p.id];
     }
     page = HTTP_HEAD.replace("{v}", "Credentials Saved");
     page += HTTP_SAVED;
     page += HTTP_END;
     res.writeHead(200,{'Content-Length':page.length,'Content-Type': 'text/html'});
     res.end(page);
-    wifi.setHostname(a.query.n);
+    wifi.setHostname(a.query.n||self.apName);
     wifi.connect(a.query.s, {password:a.query.p},
        (err) => {
           if (err) {
@@ -251,20 +252,21 @@ function onPageRequest(req, res, self) {
             if (self.connectedcallback) self.connectedcallback(); else setTimeout(self.restart,1000);
           });
      });
-     if (self.paramscallback) self.paramscallback(self.params);
+    if (self.paramscallback) self.paramscallback(self.params);
+    return;
   }
-  else if (a.pathname === '/r') {
+  if (a.pathname === '/r') {
     page = HTTP_HEAD.replace("{v}", "Info");
     page += "Module will reset in a few seconds.";
     page += HTTP_END;
     res.writeHead(200,{'Content-Length':page.length,'Content-Type': 'text/html'});
     res.end(page);
     setTimeout(self.restart,200);
+    return;
   }
-  //else if (a.pathname == '/generate_204') handle204(req,res,a);
-  else {
-    res.writeHead(302, {'Location': 'http://'+C.DNSIPSTR+'/'});
-  }
+  res.writeHead(302, {'Location': 'http://'+self.apName});
+  res.end('');
+  return;
 }
 
 
@@ -329,6 +331,12 @@ exports.clearsaved = function() {
 
 /*
 exports.clearsaved();
-exports.start({wifiScanInterval:5000,params:[{id:'a',name:'a',value:'dummy',placeholder:'enter value'}]});
+exports.start({
+  wifiScanInterval:30000,
+  paramscallback:function(p){console.log(p);},
+  params:[
+    {id:'a',value:'dummy',placeholder:'enter value'},
+    {id:'b',value:'dummy2',placeholder:'enter value2'},
+  ]
+});
 */
-
