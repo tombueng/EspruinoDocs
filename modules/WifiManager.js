@@ -13,6 +13,7 @@ var C = {
   APNAME : "ESP8266",
 };
 
+var wifi = require('Wifi');
 
 /** WifiManager constructor */
 function WifiManager(options) {
@@ -30,19 +31,33 @@ function WifiManager(options) {
   this.wifiitems = "";
 }
 
-function startup(err) {
-  if (err) {
-    this.log(err);
-    this.restart(err);
-  }
-  this.log("AP started");
-  startSetupHttpServer();
-  startDNSServer();
-  setTimeout(wifiScan,2000);
+function wifiScan(self) {
+  self.log('scan wifi...');
+  wifi.scan( function(res){
+    //sort by rssi
+    res = res.sort((a,b) => (b.rssi - a.rssi)); 
+    // remove dubs
+    res = res.filter((t, i, s) => i === s.findIndex((th) => (th.ssid === t.ssid)));
+    var count=0;
+    var scantxt='';
+    for (const e of res) {
+      var quality = getRSSIasQuality(e.rssi);
+      if (self.minimumQuality == -1 || self.minimumQuality < quality) {
+        count++;
+        scantxt += HTTP_ITEM
+          .replace("{v}", e.ssid)
+          .replace("{r}", quality)
+          .replace("{i}", e.authmode == 'open' ? '' : 'l');
+      }
+    }
+    if (count===0) scantxt = "No networks found.";
+    wifiitems="<br/>"+scantxt;
+    self.log('wifi scan done. found '+count+' networks.');
+    setTimeout(function(){wifiScan(self);},self.wifiScanInterval);
+  });
 }
 
 WifiManager.prototype.start = function() {
-  var wifi=require('Wifi');
   if (wifi.getStatus().station=='connecting') {
     setTimeout(this.start,500);
     return false;
@@ -53,7 +68,17 @@ WifiManager.prototype.start = function() {
     this.log('No wifi connection. Starting setup. Connect to ap '+this.apName+' for setup.');
     //create captive portal for setup wifi credentials
     wifi.setConfig({powersave : "none"});
-    wifi.startAP(this.apName,{"authMode":'open',"password" : null},startup);
+    var self=this;
+    wifi.startAP(this.apName,{"authMode":'open',"password" : null},function(err) {
+      if (err) {
+        self.log(err);
+        self.restart(err);
+      }
+      self.log("AP started");
+      self.startHttpServer();
+      self.startDNSServer();
+      setTimeout(function(){wifiScan(self);},2000);
+    });
   } else {
     this.log('wifi connected. IP: '+wifi.getIP().ip);
     wifi.stopAP();
@@ -68,6 +93,7 @@ WifiManager.prototype.params = function() {
 var HTTP_HEAD = `
 <!DOCTYPE html>
 <html lang='en'>
+
   <head>
     <meta charset='UTF-8' name='viewport' content='width=device-width, initial-scale=1, user-scalable=no' />
     <title>{v}</title>
@@ -79,13 +105,16 @@ var HTTP_HEAD = `
         padding: 5px;
         font-size: 1em;
       }
+
       input {
         width: 95%;
       }
+
       body {
         text-align: center;
         font-family: verdana;
       }
+
       button {
         border: 0;
         border-radius: 0.3rem;
@@ -95,23 +124,28 @@ var HTTP_HEAD = `
         font-size: 1.2rem;
         width: 100%;
       }
+
       .q {
         float: right;
         width: 64px;
         text-align: right;
       }
+
       .l {
         background: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAALVBMVEX///8EBwfBwsLw8PAzNjaCg4NTVVUjJiZDRUUUFxdiZGSho6OSk5Pg4eFydHTCjaf3AAAAZElEQVQ4je2NSw7AIAhEBamKn97/uMXEGBvozkWb9C2Zx4xzWykBhFAeYp9gkLyZE0zIMno9n4g19hmdY39scwqVkOXaxph0ZCXQcqxSpgQpONa59wkRDOL93eAXvimwlbPbwwVAegLS1HGfZAAAAABJRU5ErkJggg==') no-repeat left center;
         background-size: 1em;
       }
+
     </style>
     <script>
       function c(l) {
         document.getElementById('s').value = l.innerText || l.textContent;
         document.getElementById('p').focus();
       }
+
     </script>
   </head>
+
   <body>
     <div style='text-align:left;display:inline-block;min-width:260px;'>
 `;
@@ -152,48 +186,75 @@ var HTTP_END = `
   </div></body></html>`;
 
 
-function onPageRequest(req, res) { 
+function onPageRequest(req, res, self) { 
   var a = url.parse(req.url, true);
-  if (a.pathname === '/' || a.pathname === '') handleRoot(req,res,a);
-  else if (a.pathname === '/s') handleWifiSave(req,res,a);
-  else if (a.pathname === '/i') handleInfo(req,res,a);
-  else if (a.pathname === '/r') handleReset(req,res,a);
-  //else if (a.pathname == '/generate_204') handle204(req,res,a);
-  else handle404(req,res,a);
-}
-
-function handle404(req,res,a) {
-  res.writeHead(302, {'Location': 'http://'+C.DNSIPSTR+'/'});
-}
-
-function handleRoot(req,res,a) {
-  var page = HTTP_HEAD.replace("{v}", "Config ESP");
-  page += "<h1>" + this.title + "</h1>";
-  page += "<h3>Setup Wifi</h3>";
-  page += HTTP_FORM_START.replace('{n}',this.apName);
-  page += wifiitems;
-  // add the extra parameters to the form
-  for (const p of this.params) {
-    var pitem = HTTP_FORM_PARAM;
-    if (p.id) {
-      pitem.replace("{i}", p.id);
-      pitem.replace("{n}", p.name);
-      pitem.replace("{p}", p.placeholder);
-      pitem.replace("{l}", p.valueLength);
-      pitem.replace("{v}", p.value);
-      pitem.replace("{c}", p.customHTML);
-    } else {
-      pitem = p.customHTML;
+  var page;
+  if (a.pathname === '/' || a.pathname === '') {
+    page = HTTP_HEAD.replace("{v}", "Config ESP");
+    page += "<h1>" + self.title + "</h1>";
+    page += "<h3>Setup Wifi</h3>";
+    page += HTTP_FORM_START.replace('{n}',self.apName);
+    page += wifiitems;
+    // add the extra parameters to the form
+    for (const p of self.params) {
+      var pitem = HTTP_FORM_PARAM;
+      if (p.id) {
+        pitem.replace("{i}", p.id);
+        pitem.replace("{n}", p.name);
+        pitem.replace("{p}", p.placeholder);
+        pitem.replace("{l}", p.valueLength);
+        pitem.replace("{v}", p.value);
+        pitem.replace("{c}", p.customHTML);
+      } else {
+        pitem = p.customHTML;
+      }
+      page += pitem;
     }
-    page += pitem;
+    page += HTTP_FORM_END;
+    page += HTTP_SCAN_LINK;
+
+    page += HTTP_END;
+
+    res.writeHead(200,{'Content-Length':page.length,'Content-Type': 'text/html'});
+    res.end(page);
   }
-  page += HTTP_FORM_END;
-  page += HTTP_SCAN_LINK;
-
-  page += HTTP_END;
-
-  res.writeHead(200,{'Content-Length':page.length,'Content-Type': 'text/html'});
-  res.end(page);
+  else if (a.pathname === '/s') {
+    //parameters
+    for (const p of self.params) {
+      p.value = a.query[p.name];
+    }
+    page = HTTP_HEAD.replace("{v}", "Credentials Saved");
+    page += HTTP_SAVED;
+    page += HTTP_END;
+    res.writeHead(200,{'Content-Length':page.length,'Content-Type': 'text/html'});
+    res.end(page);
+    wifi.setHostname(a.query.n);
+    wifi.connect(a.query.s, {password:a.query.p},
+       function(err) {
+          if (err) {
+            self.log('error connecting to wifi: '+err);
+            return;
+          }
+          self.log('wifi connected');
+          setTimeout(wifi.save,200);
+          wifi.stopAP(function(){
+            if (self.connectedcallback) self.connectedcallback(); else setTimeout(self.restart,1000);
+          });
+     });
+     if (self.paramscallback) self.paramscallback(self.params);
+  }
+  else if (a.pathname === '/r') {
+    page = HTTP_HEAD.replace("{v}", "Info");
+    page += "Module will reset in a few seconds.";
+    page += HTTP_END;
+    res.writeHead(200,{'Content-Length':page.length,'Content-Type': 'text/html'});
+    res.end(page);
+    setTimeout(self.restart,200);
+  }
+  //else if (a.pathname == '/generate_204') handle204(req,res,a);
+  else {
+    res.writeHead(302, {'Location': 'http://'+C.DNSIPSTR+'/'});
+  }
 }
 
 function getRSSIasQuality(RSSI) {
@@ -206,45 +267,6 @@ function getRSSIasQuality(RSSI) {
     quality = 2 * (RSSI + 100);
   }
   return quality;
-}
-
-
-function savedata(err) {
-  if (err) {
-    this.log('error connecting to wifi: '+err);
-    return;
-  }
-  this.log('wifi connected');
-  setTimeout(wifi.save,200);
-  wifi.stopAP(function(){
-    if (this.connectedcallback) this.connectedcallback(); else setTimeout(this.restart,1000);
-  });
-}
-
-function handleWifiSave(req,res,a) {
-  var wifi = require('Wifi');
-  //parameters
-  for (const p of this.params) {
-    p.value = a.query[p.name];
-  }
-  var page = HTTP_HEAD.replace("{v}", "Credentials Saved");
-  page += HTTP_SAVED;
-  page += HTTP_END;
-  res.writeHead(200,{'Content-Length':page.length,'Content-Type': 'text/html'});
-  res.end(page);
-  wifi.setHostname(a.query.n);
-  wifi.connect(a.query.s, {password:a.query.p}, savedata);
-  if (this.paramscallback) this.paramscallback(this.params);
-}
-
-
-function handleReset(req,res,a) {
-  var page = HTTP_HEAD.replace("{v}", "Info");
-  page += "Module will reset in a few seconds.";
-  page += HTTP_END;
-  res.writeHead(200,{'Content-Length':page.length,'Content-Type': 'text/html'});
-  res.end(page);
-  setTimeout(this.restart,200);
 }
 
 
@@ -266,12 +288,13 @@ function dnsResponse(msg,dns_ip){
          dnsQname(msg) + '\x00\x01\x00\x01\xc0\x0c\x00\x01\x00\x01\x00\x00\x00\xf9\x00\x04' + dns_ip  ;
 }
 
-function startDNSServer(){ 
+WifiManager.prototype.startDNSServer = function() { 
   this.dns = require('dgram').createSocket('udp4');
   var dnsIP = C.DNSIPSTR.split('.').map(n => String.fromCharCode(parseInt(n, 10))).join('');
+  var self=this;
   this.dns.on('error', (err) => {
-    this.log('error starting dns server: '+err);
-    this.restart();
+    self.log('error starting dns server: '+err);
+    self.restart();
   });
   this.dns.on('message', (msg, info) => {
     if ( msg[msg.length-3] === '\x01') {
@@ -279,44 +302,17 @@ function startDNSServer(){
     }
   });
   this.dns.bind(53);
-}
+};
 
 
 // start http server
-function startSetupHttpServer(){
-  this.server = require('http').createServer(onPageRequest);
+WifiManager.prototype.startHttpServer = function(){
+  var self=this;
+  this.server = require('http').createServer(function(){onPageRequest(req, res, self);});
   this.server.listen(80);
-}
-
-function scanResult(res){
-    //sort by rssi
-    res = res.sort((a,b) => (b.rssi - a.rssi)); 
-    // remove dubs
-    res = res.filter((t, i, s) => i === s.findIndex((th) => (th.ssid === t.ssid)));
-    var count=0;
-    var scantxt='';
-    for (const e of res) {
-      var quality = getRSSIasQuality(e.rssi);
-      if (this.minimumQuality == -1 || this.minimumQuality < quality) {
-        count++;
-        scantxt += HTTP_ITEM
-        .replace("{v}", e.ssid)
-        .replace("{r}", quality)
-        .replace("{i}", e.authmode == 'open' ? '' : 'l');
-      }
-    }
-    if (count===0) scantxt = "No networks found.";
-    wifiitems="<br/>"+scantxt;
-    this.log('wifi scan done. found '+count+' networks.');
-    setTimeout(wifiScan,this.wifiScanInterval);
-  }
+};
 
 
-function wifiScan() {
-  var wifi=require('Wifi');
-  this.log('scan wifi...');
-  wifi.scan( scanResult );
-}
 
 
 /* Exports *************************************/
