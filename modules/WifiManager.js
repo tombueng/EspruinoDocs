@@ -30,6 +30,17 @@ function WifiManager(options) {
   this.wifiitems = "";
 }
 
+function startup(err) {
+  if (err) {
+    this.log(err);
+    this.restart(err);
+  }
+  this.log("AP started");
+  startSetupHttpServer();
+  startDNSServer();
+  setTimeout(wifiScan,2000);
+}
+
 WifiManager.prototype.start = function() {
   var wifi=require('Wifi');
   if (wifi.getStatus().station=='connecting') {
@@ -42,16 +53,7 @@ WifiManager.prototype.start = function() {
     this.log('No wifi connection. Starting setup. Connect to ap '+this.apName+' for setup.');
     //create captive portal for setup wifi credentials
     wifi.setConfig({powersave : "none"});
-    wifi.startAP(this.apName,{"authMode":'open',"password" : null},function(err) {
-      if (err) {
-        this.log(err);
-        this.restart(err);
-      }
-      this.log("AP started");
-      startSetupHttpServer();
-      startDNSServer();
-      setTimeout(wifiScan,2000);
-    });
+    wifi.startAP(this.apName,{"authMode":'open',"password" : null},startup);
   } else {
     this.log('wifi connected. IP: '+wifi.getIP().ip);
     wifi.stopAP();
@@ -66,7 +68,6 @@ WifiManager.prototype.params = function() {
 var HTTP_HEAD = `
 <!DOCTYPE html>
 <html lang='en'>
-
   <head>
     <meta charset='UTF-8' name='viewport' content='width=device-width, initial-scale=1, user-scalable=no' />
     <title>{v}</title>
@@ -78,16 +79,13 @@ var HTTP_HEAD = `
         padding: 5px;
         font-size: 1em;
       }
-
       input {
         width: 95%;
       }
-
       body {
         text-align: center;
         font-family: verdana;
       }
-
       button {
         border: 0;
         border-radius: 0.3rem;
@@ -97,28 +95,23 @@ var HTTP_HEAD = `
         font-size: 1.2rem;
         width: 100%;
       }
-
       .q {
         float: right;
         width: 64px;
         text-align: right;
       }
-
       .l {
         background: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAALVBMVEX///8EBwfBwsLw8PAzNjaCg4NTVVUjJiZDRUUUFxdiZGSho6OSk5Pg4eFydHTCjaf3AAAAZElEQVQ4je2NSw7AIAhEBamKn97/uMXEGBvozkWb9C2Zx4xzWykBhFAeYp9gkLyZE0zIMno9n4g19hmdY39scwqVkOXaxph0ZCXQcqxSpgQpONa59wkRDOL93eAXvimwlbPbwwVAegLS1HGfZAAAAABJRU5ErkJggg==') no-repeat left center;
         background-size: 1em;
       }
-
     </style>
     <script>
       function c(l) {
         document.getElementById('s').value = l.innerText || l.textContent;
         document.getElementById('p').focus();
       }
-
     </script>
   </head>
-
   <body>
     <div style='text-align:left;display:inline-block;min-width:260px;'>
 `;
@@ -216,6 +209,18 @@ function getRSSIasQuality(RSSI) {
 }
 
 
+function savedata(err) {
+  if (err) {
+    this.log('error connecting to wifi: '+err);
+    return;
+  }
+  this.log('wifi connected');
+  setTimeout(wifi.save,200);
+  wifi.stopAP(function(){
+    if (this.connectedcallback) this.connectedcallback(); else setTimeout(this.restart,1000);
+  });
+}
+
 function handleWifiSave(req,res,a) {
   var wifi = require('Wifi');
   //parameters
@@ -228,19 +233,8 @@ function handleWifiSave(req,res,a) {
   res.writeHead(200,{'Content-Length':page.length,'Content-Type': 'text/html'});
   res.end(page);
   wifi.setHostname(a.query.n);
-  wifi.connect(a.query.s, {password:a.query.p},
-     function(err) {
-        if (err) {
-          this.log('error connecting to wifi: '+err);
-          return;
-        }
-        this.log('wifi connected');
-        setTimeout(wifi.save,200);
-        wifi.stopAP(function(){
-          if (this.connectedcallback) this.connectedcallback(); else setTimeout(this.restart,1000);
-        });
-   });
-   if (this.paramscallback) this.paramscallback(this.params);
+  wifi.connect(a.query.s, {password:a.query.p}, savedata);
+  if (this.paramscallback) this.paramscallback(this.params);
 }
 
 
@@ -294,10 +288,7 @@ function startSetupHttpServer(){
   this.server.listen(80);
 }
 
-function wifiScan() {
-  var wifi=require('Wifi');
-  this.log('scan wifi...');
-  wifi.scan( function(res){
+function scanResult(res){
     //sort by rssi
     res = res.sort((a,b) => (b.rssi - a.rssi)); 
     // remove dubs
@@ -318,7 +309,13 @@ function wifiScan() {
     wifiitems="<br/>"+scantxt;
     this.log('wifi scan done. found '+count+' networks.');
     setTimeout(wifiScan,this.wifiScanInterval);
-  });
+  }
+
+
+function wifiScan() {
+  var wifi=require('Wifi');
+  this.log('scan wifi...');
+  wifi.scan( scanResult );
 }
 
 
@@ -337,7 +334,3 @@ exports.start = function(options) {
 exports.clearsaved = function() {
   require('Wifi').save('clear');
 };
-
-
-
-
