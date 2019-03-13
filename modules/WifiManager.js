@@ -334,6 +334,10 @@ exports.start = function(options) {
   return new WifiManager(options).start();
 };
 
+exports.clearsaved = function() {
+  require('Wifi').save('clear');
+};
+
 
 
 
