@@ -22,16 +22,12 @@ var wifimanager = require("WifiManager");
 ### Without config options
 
 ```
-var wifimanager = require("WifiManager").start();
+require("WifiManager").start();
 ```
 ### With config options
 
 ```
-var wifimanager = require("WifiManager").start({
-
-});
-
-var wifimanager = require("WifiManager").start({
+require("WifiManager").start({
   minimumQuality: -1, //minimum wifi quality, -1: No minimum
   wifiScanInterval: 30000, //Scan for access point every wifiScanInterval ms, default: 30000
   apName: 'ESP8266', //Access Point name
@@ -41,6 +37,15 @@ var wifimanager = require("WifiManager").start({
   connectedcallback: function(){...},
   log: : function(e){console.log(e);},
   restart: function(){require('ESP8266').reboot()}
+});
+
+require("WifiManager").start({
+  wifiScanInterval:5000,
+  paramscallback:function(p){console.log(p);},
+  params:[
+    {id:'a',value:'dummy',placeholder:'enter value'},
+    {id:'b',value:'dummy2',placeholder:'enter value2'},
+  ]
 });
 ```
 
@@ -67,8 +72,7 @@ defaults to "require('ESP8266').reboot()".
 
 ```
 {
-  id: 'ms', //id id is present, fill template, use customHTML solely otherwise
-  name: 'ms', //html form field name
+  id: 'ms', //if id is present, fill template, use customHTML solely otherwise
   placeholder: 'MQTT Server',
   valueLength: '50',
   value: 'mqqt.example.org',
@@ -92,4 +96,5 @@ Or use customHTML and name only and create own display. Form data will be writte
 
 ## Credits go to
 
-@MaBecker
+WifiManger C implementation https://github.com/tzapu/WiFiManager/
+And @MaBecker for his https://gist.github.com/MaBecker/ae9dade26b44524e076ca19f5fd72fab
