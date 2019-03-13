@@ -26,7 +26,7 @@ function WifiManager(options) {
   this.paramscallback = options.paramscallback;
   this.connectedcallback = options.connectedcallback;
   this.log = options.log || console.log;
-  this.restart = options.restart || function(){require('ESP8266').reboot()};
+  this.restart = options.restart || function(){require('ESP8266').reboot();};
   this.wifiitems = "";
 }
 
@@ -61,7 +61,7 @@ WifiManager.prototype.start = function() {
 
 WifiManager.prototype.params = function() {
   return this.params;
-}
+};
 
 var HTTP_HEAD = `
 <!DOCTYPE html>
@@ -328,11 +328,12 @@ function wifiScan() {
 
 exports.create = function(options) {
   return new WifiManager(options);
-}
+};
 
 exports.start = function(options) {
   return new WifiManager(options).start();
-}
+};
+
 
 
 
