@@ -5,8 +5,6 @@ based on https://github.com/tzapu/WiFiManager/
 and https://gist.github.com/MaBecker/ae9dade26b44524e076ca19f5fd72fab
 */
 
-
-
 /** 'private' constants */
 var C = {
   DNSIPSTR : "192.168.4.1",
