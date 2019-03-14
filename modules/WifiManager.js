@@ -40,7 +40,7 @@ function wifiScan(self) {
     res = res.filter((t, i, s) => i === s.findIndex((th) => (th.ssid === t.ssid)));
     var count=0;
     var scantxt='';
-    for (const e of res) {
+    for (var e of res) {
       var quality = getRSSIasQuality(e.rssi);
       if (self.minimumQuality == -1 || self.minimumQuality < quality) {
         count++;
