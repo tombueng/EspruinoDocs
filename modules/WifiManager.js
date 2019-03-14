@@ -54,28 +54,28 @@ function getRSSIasQuality(RSSI) {
 }
 
 
-WifiManager.prototype.start = function() {
+WifiManager.prototype.start = function(self) {
   if (wifi.getStatus().station=='connecting') {
-    setTimeout(this.start,500);
+    setTimeout(()=>{self.start(self);},500);
     return false;
   }
   if( wifi.getIP().ip === "0.0.0.0" ) {
-    this.log('No wifi connection. Starting setup. Connect to ap '+this.apName+' for setup.');
+    self.log('No wifi connection. Starting setup. Connect to ap '+self.apName+' for setup.');
     wifi.setConfig({powersave : "none"});
-    wifi.startAP(this.apName,{"authMode":'open',"password":null},(err) => {
+    wifi.startAP(self.apName,{"authMode":'open',"password":null},(err) => {
       if (err) {
-        this.log(err);
-        this.restart(err);
+        self.log(err);
+        self.restart(err);
       }
-      this.log("AP started");
-      this.startHttpServer();
-      this.startDNSServer();
-      setTimeout(()=>{wifiScan(this);},2000);
+      self.log("AP started");
+      self.startHttpServer();
+      self.startDNSServer();
+      setTimeout(()=>{wifiScan(self);},2000);
     });
   } else {
-    this.log('wifi connected. IP: '+wifi.getIP().ip);
+    self.log('wifi connected. IP: '+wifi.getIP().ip);
     wifi.stopAP();
-    if (this.connectedcallback) this.connectedcallback();
+    if (self.connectedcallback) self.connectedcallback();
   }
 };
 
@@ -201,9 +201,10 @@ WifiManager.prototype.startHttpServer = function(){
 
 
 exports.start = function(connectedcallback,options) {
+  var self=this;
   options = options || {};
   options.connectedcallback=connectedcallback;
-  setTimeout(()=>{new WifiManager(options).start(),1000});
+  setTimeout(()=>{new WifiManager(options).start(self),1000});
 };
 
 exports.clearsaved = function() {
