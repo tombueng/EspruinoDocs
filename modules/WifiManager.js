@@ -75,7 +75,7 @@ WifiManager.prototype.start = function() {
   } else {
     this.log('wifi connected. IP: '+wifi.getIP().ip);
     wifi.stopAP();
-    if (self.connectedcallback) self.connectedcallback();
+    if (this.connectedcallback) this.connectedcallback();
   }
 };
 
@@ -203,7 +203,7 @@ WifiManager.prototype.startHttpServer = function(){
 exports.start = function(connectedcallback,options) {
   options = options || {};
   options.connectedcallback=connectedcallback;
-  setTimeout(()=>{new WifiManager(options).start(),2000});
+  setTimeout(()=>{new WifiManager(options).start(),1000});
 };
 
 exports.clearsaved = function() {
