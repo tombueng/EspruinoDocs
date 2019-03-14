@@ -201,6 +201,7 @@ WifiManager.prototype.startHttpServer = function(){
 
 
 exports.start = function(connectedcallback,options) {
+  options = options || {};
   options.connectedcallback=connectedcallback;
   setTimeout(()=>{new WifiManager(options).start(),2000});
 };
