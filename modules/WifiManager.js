@@ -40,7 +40,7 @@ function wifiScan(self) {
     if (count===0) scantxt = "No networks found.";
     wifiitems="<br/>"+scantxt;
     self.log('wifi scan done. found '+count+' networks.');
-    setTimeout(()=>{wifiScan(self);},self.wifiScanInterval);
+    self.wifiscantimer=setTimeout(()=>{wifiScan(self);},self.wifiScanInterval);
   });
 }
 
@@ -75,6 +75,7 @@ WifiManager.prototype.start = function(self) {
   } else {
     self.log('wifi connected. IP: '+wifi.getIP().ip);
     wifi.stopAP();
+	if (self.scanwifitimer) clearTimeout(self.scanwifitimer);
     if (self.connectedcallback) self.connectedcallback();
   }
 };
@@ -83,7 +84,7 @@ WifiManager.prototype.params = function() {
   return this.params;
 };
 
-var HTTP_HEAD = "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8' name='viewport' content='width=device-width, initial-scale=1, user-scalable=no' /><title>{v}</title><style>.c{text-align: center;}div, input {padding: 5px;        font-size: 1em;      }      input {        width: 95%;      }      body {        text-align: center;        font-family: verdana;      }      button {        border: 0;        border-radius: 0.3rem;        background-color: #1fa3ec;        color: #fff;        line-height: 2.4rem;        font-size: 1.2rem;        width: 100%;      }      .q {        float: right;        width: 64px;        text-align: right;      }      .l {        background: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAALVBMVEX///8EBwfBwsLw8PAzNjaCg4NTVVUjJiZDRUUUFxdiZGSho6OSk5Pg4eFydHTCjaf3AAAAZElEQVQ4je2NSw7AIAhEBamKn97/uMXEGBvozkWb9C2Zx4xzWykBhFAeYp9gkLyZE0zIMno9n4g19hmdY39scwqVkOXaxph0ZCXQcqxSpgQpONa59wkRDOL93eAXvimwlbPbwwVAegLS1HGfZAAAAABJRU5ErkJggg==') no-repeat left center;        background-size: 1em;      }    </style>    <script>      function c(l) {        document.getElementById('s').value = l.innerText || l.textContent;        document.getElementById('p').focus();      }    </script>  </head>  <body>    <div style='text-align:left;display:inline-block;min-width:260px;'>";
+var HTTP_HEAD = "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8' name='viewport' content='width=device-width, initial-scale=1, user-scalable=no' /><style>.c{text-align: center;}div, input {padding: 5px;        font-size: 1em;      }      input {        width: 95%;      }      body {        text-align: center;        font-family: verdana;      }      button {        border: 0;        border-radius: 0.3rem;        background-color: #1fa3ec;        color: #fff;        line-height: 2.4rem;        font-size: 1.2rem;        width: 100%;      }      .q {        float: right;        width: 64px;        text-align: right;      }      .l {        background: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAALVBMVEX///8EBwfBwsLw8PAzNjaCg4NTVVUjJiZDRUUUFxdiZGSho6OSk5Pg4eFydHTCjaf3AAAAZElEQVQ4je2NSw7AIAhEBamKn97/uMXEGBvozkWb9C2Zx4xzWykBhFAeYp9gkLyZE0zIMno9n4g19hmdY39scwqVkOXaxph0ZCXQcqxSpgQpONa59wkRDOL93eAXvimwlbPbwwVAegLS1HGfZAAAAABJRU5ErkJggg==') no-repeat left center;        background-size: 1em;      }    </style>    <script>      function c(l) {        document.getElementById('s').value = l.innerText || l.textContent;        document.getElementById('p').focus();      }    </script>  </head>  <body>    <div style='text-align:left;display:inline-block;min-width:260px;'>";
 var HTTP_ITEM = "<div><a href='#p' onclick='c(this)'>{v}</a>&nbsp;<span class='q {i}'>{r}%</span></div>";
 var HTTP_FORM_START = "<form method='get' action='/s'><input id='s' name='s' length=32 placeholder='SSID'><br/><input id='p' name='p' length=64 type='password' placeholder='password'><br/><input id='n' name='n' length=32 placeholder='Device name' value='{n}'><br/>";
 var HTTP_FORM_PARAM = "<input id='{i}' name='{n}' maxlength={l} placeholder='{p}' value='{v}' {c}><br/>";
@@ -97,7 +98,7 @@ function onPageRequest(req, res, self) {
   var a = url.parse(req.url, true);
   var page;
   if (a.pathname === '/' || a.pathname === '') {
-    page = HTTP_HEAD.replace("{v}", "Config ESP");
+    page = HTTP_HEAD;
     page += "<h1>" + self.title + "</h1>";
     page += "<h3>Setup Wifi</h3>";
     page += HTTP_FORM_START.replace('{n}',self.apName);
@@ -128,7 +129,7 @@ function onPageRequest(req, res, self) {
     self.params.forEach((p)=>{
       p.value = a.query[p.id];
     });
-    page = HTTP_HEAD.replace("{v}", "Credentials Saved");
+    page = HTTP_HEAD;
     page += HTTP_SAVED;
     page += HTTP_END;
     res.writeHead(200,{'Content-Length':page.length,'Content-Type': 'text/html'});
@@ -150,7 +151,7 @@ function onPageRequest(req, res, self) {
     return;
   }
   if (a.pathname === '/r') {
-    page = HTTP_HEAD.replace("{v}", "Info");
+    page = HTTP_HEAD;
     page += "Module will reset in a few seconds.";
     page += HTTP_END;
     res.writeHead(200,{'Content-Length':page.length,'Content-Type': 'text/html'});
@@ -201,10 +202,10 @@ WifiManager.prototype.startHttpServer = function(){
 
 
 exports.start = function(connectedcallback,options) {
-  var self=this;
   options = options || {};
   options.connectedcallback=connectedcallback;
-  setTimeout(()=>{new WifiManager(options).start(self),1000});
+  var self=new WifiManager(options);
+  setTimeout(()=>{self.start(self),1000});
 };
 
 exports.clearsaved = function() {
