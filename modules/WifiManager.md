@@ -22,24 +22,29 @@ var wifimanager = require("WifiManager");
 ### Without config options
 
 ```
-require("WifiManager").start();
+require("WifiManager").start(()=>{
+  //my application code goes here
+});
 ```
 ### With config options
 
 ```
-require("WifiManager").start({
+require("WifiManager").start(()=>{
+  //my application code goes here
+},{
   minimumQuality: -1, //minimum wifi quality, -1: No minimum
   wifiScanInterval: 30000, //Scan for access point every wifiScanInterval ms, default: 30000
   apName: 'ESP8266', //Access Point name
   title: 'ESP8266', //html page title
   params: {}, //custom setup parameters
   paramscallback: function(params){...},
-  connectedcallback: function(){...},
   log: : function(e){console.log(e);},
   restart: function(){require('ESP8266').reboot()}
 });
 
-require("WifiManager").start({
+require("WifiManager").start(()=>{
+  //my application code goes here
+},{
   wifiScanInterval:5000,
   paramscallback:function(p){console.log(p);},
   params:[
@@ -53,11 +58,7 @@ require("WifiManager").start({
 
 ### paramscallback(params)
 
-called with parsed params when wifi is connected.
-
-### connectedcallback()
-
-called when wifi is connected.
+called with parsed params when wifi is connected. Use this to save your params in flash.
 
 ### log(e)
 
@@ -88,7 +89,7 @@ will fill and use the following provided template:
 Or use customHTML and name only and create own display. Form data will be written to params[param.name]
 ```
 {
-  name: 'ms', //html form field name
+  id: 'ms', //html form field name
   customHTML: "<input name='ms' value='Mqtt Server'><br/>"
 }
 ```
